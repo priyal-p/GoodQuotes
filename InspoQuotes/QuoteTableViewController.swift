@@ -7,8 +7,12 @@
 //
 
 import UIKit
+import StoreKit
 
 class QuoteTableViewController: UITableViewController {
+    
+    // Refer from App Store Connect product id
+    var productID = "xyz"
     
     var quotesToShow = [
         "Our greatest glory is not in never falling, but in rising every time we fall. — Confucius",
@@ -28,9 +32,15 @@ class QuoteTableViewController: UITableViewController {
         "Believe in yourself, take on your challenges, dig deep within yourself to conquer fears. Never let anyone bring you down. You got to keep going. – Chantal Sutherland"
     ]
 
+    var isPurchased: Bool {
+        return UserDefaults.standard.bool(forKey: productID)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        // Adds an observer to the payment queue.
+        SKPaymentQueue.default().add(self)
         // Uncomment the following line to preserve selection between presentations
         // self.clearsSelectionOnViewWillAppear = false
 
@@ -41,7 +51,7 @@ class QuoteTableViewController: UITableViewController {
     // MARK: - Table view data source
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return quotesToShow.count + 1
+        return isPurchased ? quotesToShow.count : quotesToShow.count + 1
     }
 
 
@@ -53,7 +63,9 @@ class QuoteTableViewController: UITableViewController {
             // Configure the quote cell...
             content.text = quotesToShow[indexPath.row]
             content.textProperties.numberOfLines = 0
-        } else {
+            content.textProperties.color = UIColor.black
+            cell.accessoryType = .none
+        } else if isPurchased, indexPath.row == quotesToShow.count {
             content.text = "Get more quotes 🤓..."
             content.textProperties.color = UIColor(red: 40, green: 170, blue: 192, alpha: 1)
             cell.accessoryType = .disclosureIndicator
@@ -64,7 +76,7 @@ class QuoteTableViewController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        if indexPath.row == quotesToShow.count {
+        if isPurchased, indexPath.row == quotesToShow.count {
             // Get more quotes tapped
             buyPremiumQuotes()
             tableView.deselectRow(at: indexPath, animated: true)
@@ -72,7 +84,19 @@ class QuoteTableViewController: UITableViewController {
     }
 
     func buyPremiumQuotes() {
-        
+        if SKPaymentQueue.canMakePayments() {
+            // Can make payments
+            let paymentRequest = SKMutablePayment()
+            paymentRequest.productIdentifier = productID
+            SKPaymentQueue.default().add(paymentRequest)
+        } else {
+
+        }
+    }
+
+    func showPremiumQuotes() {
+        quotesToShow.append(contentsOf: premiumQuotes)
+        tableView.reloadData()
     }
 
     @IBAction func restorePressed(_ sender: UIBarButtonItem) {
@@ -80,4 +104,27 @@ class QuoteTableViewController: UITableViewController {
     }
 
 
+}
+
+extension QuoteTableViewController: SKPaymentTransactionObserver {
+    func paymentQueue(_ queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
+        for transaction in transactions {
+            switch transaction.transactionState {
+            case .purchased:
+                print("Transaction Successful")
+                showPremiumQuotes()
+                SKPaymentQueue.default().finishTransaction(transaction)
+                UserDefaults.standard.setValue(true, forKey: productID)
+            case .failed:
+                if let error = transaction.error {
+                    print("Transaction failed with error: \(error)")
+                }
+                SKPaymentQueue.default().finishTransaction(transaction)
+                UserDefaults.standard.setValue(false, forKey: productID)
+            default:
+                print("Transaction State: ", transaction.transactionState)
+                UserDefaults.standard.setValue(false, forKey: productID)
+            }
+        }
+    }
 }
